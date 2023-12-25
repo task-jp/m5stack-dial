@@ -169,6 +169,9 @@ fn main() -> ! {
         interrupt::enable(peripherals::Interrupt::PCNT, interrupt::Priority::Priority2).unwrap();
     }
 
+    #[cfg(feature = "button")]
+    let mtms = io.pins.gpio42.into_pull_up_input();
+
     let style = PrimitiveStyleBuilder::new()
         .stroke_width(4)
         .stroke_color(embedded_graphics::prelude::RgbColor::BLACK)
@@ -196,7 +199,10 @@ fn main() -> ! {
         let angle = <i32 as Into<f64>>::into(last_value % 360) * PI / 180.0 * 2.0;
         let x = 120 as f64 + angle.cos() * 100 as f64 - diameter as f64 / 2.0;
         let y = 120 as f64 + angle.sin() * 100 as f64 - diameter as f64 / 2.0;
+        #[cfg(feature = "dial")]
         println!("angle: {}, x: {}, y: {}", last_value % 360, x, y);
+        #[cfg(feature = "button")]
+        println!("button: {}", mtms.is_low().unwrap());
 
         Circle::new(Point::new(x as i32, y as i32), 10)
             .into_styled(style)

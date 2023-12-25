@@ -24,9 +24,10 @@ critical-section = { version = "1.1.2", optional = true }
 num-traits = { version = "0.2", default-features = false, features = ["libm"] }
 
 [features]
-default = ["graphics", "kaizensparc-gc9a01-rs", "dial"]
+default = ["graphics", "kaizensparc-gc9a01-rs", "dial", "button"]
 graphics = ["embedded-graphics-core"]
 kaizensparc-gc9a01-rs = []
 IniterWorker-gc9a01-rs = ["gc9a01-rs"]
 samjkent-gc9a01 = []
 dial = ["critical-section"]
+button = []
