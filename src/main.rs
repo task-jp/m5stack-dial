@@ -1,9 +1,21 @@
 #![no_std]
 #![no_main]
 
+use core::{
+    cell::RefCell,
+    cmp::min,
+    f64::consts::PI,
+    sync::atomic::{AtomicI32, Ordering},
+};
+
 use esp32s3_hal::{
     clock::{ClockControl, CpuClock},
-    peripherals::Peripherals,
+    interrupt,
+    pcnt::{
+        channel::{self, PcntSource},
+        unit::{self, Unit},
+    },
+    peripherals::{self, Peripherals},
     prelude::*,
     spi::{Spi, SpiMode},
     Delay, IO,
@@ -13,9 +25,12 @@ use esp_println::println;
 
 use embedded_graphics::{
     prelude::*,
-    primitives::{Primitive, PrimitiveStyleBuilder, Rectangle},
+    primitives::{Circle, Primitive, PrimitiveStyleBuilder, Rectangle},
     Drawable,
 };
+
+#[cfg(feature = "dial")]
+use critical_section::Mutex;
 
 use display_interface_spi::SPIInterface;
 use embedded_graphics_core::{draw_target::DrawTarget, pixelcolor::Rgb565, pixelcolor::RgbColor};
@@ -31,6 +46,16 @@ mod samjkent_gc9a01;
 use samjkent_gc9a01 as gc9a01;
 
 use gc9a01::*;
+
+#[cfg(feature = "dial")]
+use esp32s3_hal::pcnt::PCNT;
+
+use num_traits::real::Real;
+
+#[cfg(feature = "dial")]
+static UNIT0: Mutex<RefCell<Option<Unit>>> = Mutex::new(RefCell::new(None));
+#[cfg(feature = "dial")]
+static VALUE: AtomicI32 = AtomicI32::new(0);
 
 #[entry]
 fn main() -> ! {
@@ -89,20 +114,113 @@ fn main() -> ! {
     let mut display = GC9A01::default(spi, cs, dc).unwrap();
     #[cfg(feature = "samjkent-gc9a01")]
     display.setup();
-    #[cfg(feature = "samjkent-gc9a01")]
-    display.clear(Rgb565::BLUE).unwrap();
+
+    #[cfg(feature = "dial")]
+    {
+        let mut mtdo = io.pins.gpio40.into_pull_up_input();
+        let mut mtdi = io.pins.gpio41.into_pull_up_input();
+        let pcnt = PCNT::new(peripherals.PCNT, &mut system.peripheral_clock_control);
+        let mut u0: unit::Unit = pcnt.get_unit(unit::Number::Unit1);
+        u0.configure(unit::Config {
+            low_limit: -100,
+            high_limit: 100,
+            filter: Some(min(10u16 * 80, 1023u16)),
+            ..Default::default()
+        })
+        .unwrap();
+        let mut ch0 = u0.get_channel(channel::Number::Channel0);
+        ch0.configure(
+            PcntSource::from_pin(&mut mtdi),
+            PcntSource::from_pin(&mut mtdo),
+            channel::Config {
+                lctrl_mode: channel::CtrlMode::Reverse,
+                hctrl_mode: channel::CtrlMode::Keep,
+                pos_edge: channel::EdgeMode::Decrement,
+                neg_edge: channel::EdgeMode::Increment,
+                invert_ctrl: false,
+                invert_sig: false,
+            },
+        );
+        let mut ch1 = u0.get_channel(channel::Number::Channel1);
+        ch1.configure(
+            PcntSource::from_pin(&mut mtdo),
+            PcntSource::from_pin(&mut mtdi),
+            channel::Config {
+                lctrl_mode: channel::CtrlMode::Reverse,
+                hctrl_mode: channel::CtrlMode::Keep,
+                pos_edge: channel::EdgeMode::Increment,
+                neg_edge: channel::EdgeMode::Decrement,
+                invert_ctrl: false,
+                invert_sig: false,
+            },
+        );
+        u0.events(unit::Events {
+            low_limit: true,
+            high_limit: true,
+            thresh0: false,
+            thresh1: false,
+            zero: false,
+        });
+        u0.listen();
+        u0.resume();
+
+        critical_section::with(|cs| UNIT0.borrow_ref_mut(cs).replace(u0));
+
+        interrupt::enable(peripherals::Interrupt::PCNT, interrupt::Priority::Priority2).unwrap();
+    }
 
     let style = PrimitiveStyleBuilder::new()
         .stroke_width(4)
         .stroke_color(embedded_graphics::prelude::RgbColor::BLACK)
         .fill_color(embedded_graphics::prelude::RgbColor::RED)
         .build();
-    Rectangle::new(Point::new(100, 100), Size::new(40u32, 40u32))
-        .into_styled(style)
-        .draw(&mut display)
-        .unwrap();
+
+    let mut last_value = 0;
+
     loop {
-        println!("loop");
+        #[cfg(feature = "dial")]
+        critical_section::with(|cs| {
+            let mut u0 = UNIT0.borrow_ref_mut(cs);
+            let u0 = u0.as_mut().unwrap();
+            let mut value: i32 = u0.get_value() as i32 + VALUE.load(Ordering::SeqCst);
+            while (value < 0) {
+                value += 360;
+            }
+            if value != last_value {
+                println!("value: {value}");
+                last_value = value;
+            }
+        });
+        display.clear(Rgb565::BLUE).unwrap();
+        let diameter: i32 = 40;
+        let angle = <i32 as Into<f64>>::into(last_value % 360) * PI / 180.0 * 2.0;
+        let x = 120 as f64 + angle.cos() * 100 as f64 - diameter as f64 / 2.0;
+        let y = 120 as f64 + angle.sin() * 100 as f64 - diameter as f64 / 2.0;
+        println!("angle: {}, x: {}, y: {}", last_value % 360, x, y);
+
+        Circle::new(Point::new(x as i32, y as i32), 10)
+            .into_styled(style)
+            .draw(&mut display)
+            .unwrap();
         delay.delay_ms(500u32);
     }
+}
+
+#[cfg(feature = "dial")]
+#[interrupt]
+fn PCNT() {
+    critical_section::with(|cs| {
+        let mut u0 = UNIT0.borrow_ref_mut(cs);
+        let u0 = u0.as_mut().unwrap();
+        if u0.interrupt_set() {
+            let events = u0.get_events();
+            if events.high_limit {
+                VALUE.fetch_add(100, Ordering::SeqCst);
+            } else if events.low_limit {
+                VALUE.fetch_add(-100, Ordering::SeqCst);
+            }
+            println!("VALUE: {}", VALUE.load(Ordering::SeqCst));
+            u0.reset_interrupt();
+        }
+    });
 }
