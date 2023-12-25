@@ -25,6 +25,11 @@ mod kaizensparc_gc9a01_rs;
 #[cfg(feature = "kaizensparc-gc9a01-rs")]
 use kaizensparc_gc9a01_rs as gc9a01;
 
+#[cfg(feature = "samjkent-gc9a01")]
+mod samjkent_gc9a01;
+#[cfg(feature = "samjkent-gc9a01")]
+use samjkent_gc9a01 as gc9a01;
+
 use gc9a01::*;
 
 #[entry]
@@ -53,8 +58,9 @@ fn main() -> ! {
     let cs = io.pins.gpio7.into_push_pull_output();
     let rst = io.pins.gpio8.into_push_pull_output();
     let mut bl = io.pins.gpio9.into_push_pull_output();
-    bl.set_high().unwrap();
+    let _ = bl.set_high().unwrap();
 
+    #[cfg(feature = "kaizensparc-gc9a01-rs")]
     let iface = SPIInterface::new(spi, dc, cs);
     #[cfg(feature = "kaizensparc-gc9a01-rs")]
     let mut display = GC9A01::new(
@@ -65,18 +71,25 @@ fn main() -> ! {
         gc9a01::DisplaySize240x240,
     )
     .unwrap();
+    #[cfg(feature = "kaizensparc-gc9a01-rs")]
+    display.clear(Rgb565::BLUE).unwrap();
 
-    #[cfg(feature = "gc9a01-rs")]
-    let display = Gc9a01::new(iface, prelude::DisplayResolution240x240, prelude::DisplayRotation::Rotate0);
-    #[cfg(feature = "gc9a01-rs")]
+    #[cfg(feature = "IniterWorker-gc9a01-rs")]
+    let iface = SPIInterface::new(spi, dc, cs);
+    #[cfg(feature = "IniterWorker-gc9a01-rs")]
+    let display = Gc9a01::new(
+        iface,
+        prelude::DisplayResolution240x240,
+        prelude::DisplayRotation::Rotate0,
+    );
+    #[cfg(feature = "IniterWorker-gc9a01-rs")]
     let mut display = display.into_buffered_graphics(); // never returns
 
-    #[cfg(feature = "gc9a01")]
-    let mut display = GC9A01::new(spi, cs, dc).unwrap();
-    #[cfg(feature = "gc9a01")]
+    #[cfg(feature = "samjkent-gc9a01")]
+    let mut display = GC9A01::default(spi, cs, dc).unwrap();
+    #[cfg(feature = "samjkent-gc9a01")]
     display.setup();
-
-    #[cfg(feature = "kaizensparc-gc9a01-rs")]
+    #[cfg(feature = "samjkent-gc9a01")]
     display.clear(Rgb565::BLUE).unwrap();
 
     let style = PrimitiveStyleBuilder::new()
