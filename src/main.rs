@@ -13,22 +13,19 @@ use esp_println::println;
 
 use embedded_graphics::{
     prelude::*,
-    primitives::{Rectangle, Primitive, PrimitiveStyleBuilder},
+    primitives::{Primitive, PrimitiveStyleBuilder, Rectangle},
     Drawable,
 };
 
-use embedded_graphics_core::{
-    pixelcolor::Rgb565,
-    draw_target::DrawTarget,
-    pixelcolor::RgbColor,
-};
 use display_interface_spi::SPIInterface;
+use embedded_graphics_core::{draw_target::DrawTarget, pixelcolor::Rgb565, pixelcolor::RgbColor};
 
 #[cfg(feature = "kaizensparc-gc9a01-rs")]
-mod gc9a01;
+mod kaizensparc_gc9a01_rs;
 #[cfg(feature = "kaizensparc-gc9a01-rs")]
+use kaizensparc_gc9a01_rs as gc9a01;
+
 use gc9a01::*;
-
 
 #[entry]
 fn main() -> ! {
@@ -68,6 +65,16 @@ fn main() -> ! {
         gc9a01::DisplaySize240x240,
     )
     .unwrap();
+
+    #[cfg(feature = "gc9a01-rs")]
+    let display = Gc9a01::new(iface, prelude::DisplayResolution240x240, prelude::DisplayRotation::Rotate0);
+    #[cfg(feature = "gc9a01-rs")]
+    let mut display = display.into_buffered_graphics(); // never returns
+
+    #[cfg(feature = "gc9a01")]
+    let mut display = GC9A01::new(spi, cs, dc).unwrap();
+    #[cfg(feature = "gc9a01")]
+    display.setup();
 
     #[cfg(feature = "kaizensparc-gc9a01-rs")]
     display.clear(Rgb565::BLUE).unwrap();
