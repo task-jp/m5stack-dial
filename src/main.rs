@@ -172,43 +172,108 @@ fn main() -> ! {
     #[cfg(feature = "button")]
     let mtms = io.pins.gpio42.into_pull_up_input();
 
-    let style = PrimitiveStyleBuilder::new()
+    #[cfg(feature = "touch")]
+    let i2c = esp32s3_hal::i2c::I2C::new(
+        peripherals.I2C0,
+        io.pins.gpio11, // tp sda
+        io.pins.gpio12, // tp scl
+        esp32s3_hal::prelude::_fugit_RateExtU32::kHz(400),
+        &mut system.peripheral_clock_control,
+        &clocks,
+    );
+
+    #[cfg(feature = "touch")]
+    let mut touch = ft3267::FT3267::new(i2c);
+
+    let dial_button_style = PrimitiveStyleBuilder::new()
         .stroke_width(4)
-        .stroke_color(embedded_graphics::prelude::RgbColor::BLACK)
+        .stroke_color(embedded_graphics::prelude::RgbColor::YELLOW)
+        .fill_color(embedded_graphics::prelude::RgbColor::BLACK)
+        .build();
+    let touch_style = PrimitiveStyleBuilder::new()
+        .stroke_width(2)
+        .stroke_color(embedded_graphics::prelude::RgbColor::WHITE)
         .fill_color(embedded_graphics::prelude::RgbColor::RED)
         .build();
 
     let mut last_value = 0;
+    let mut last_pressed = false;
+    let mut last_touch: [Option<(u16, u16)>; 2] = [None, None];
 
+    let mut first = true;
     loop {
+        let mut changed = first;
+        first = false;
+
+        #[cfg(feature = "touch")]
+        {
+            let t = touch.touch(&mut delay);
+            if t != last_touch {
+                last_touch = t;
+                changed = true;
+            }
+        }
         #[cfg(feature = "dial")]
         critical_section::with(|cs| {
             let mut u0 = UNIT0.borrow_ref_mut(cs);
             let u0 = u0.as_mut().unwrap();
             let mut value: i32 = u0.get_value() as i32 + VALUE.load(Ordering::SeqCst);
-            while (value < 0) {
+            while value < 0 {
                 value += 360;
             }
             if value != last_value {
-                println!("value: {value}");
+                // println!("value: {value}");
                 last_value = value;
+                changed = true;
             }
         });
-        display.clear(Rgb565::BLUE).unwrap();
-        let diameter: i32 = 40;
-        let angle = <i32 as Into<f64>>::into(last_value % 360) * PI / 180.0 * 2.0;
-        let x = 120 as f64 + angle.cos() * 100 as f64 - diameter as f64 / 2.0;
-        let y = 120 as f64 + angle.sin() * 100 as f64 - diameter as f64 / 2.0;
-        #[cfg(feature = "dial")]
-        println!("angle: {}, x: {}, y: {}", last_value % 360, x, y);
         #[cfg(feature = "button")]
-        println!("button: {}", mtms.is_low().unwrap());
+        {
+            let pressed = mtms.is_low().unwrap();
+            if pressed != last_pressed {
+                last_pressed = pressed;
+                changed = true;
+            }
+            // println!("button: {}", mtms.is_low().unwrap());
+        }
 
-        Circle::new(Point::new(x as i32, y as i32), 10)
-            .into_styled(style)
-            .draw(&mut display)
-            .unwrap();
-        delay.delay_ms(500u32);
+        if changed {
+            display.clear(Rgb565::BLUE).unwrap();
+            let diameter: i32 = match last_pressed {
+                true => 20,
+                false => 40,
+            };
+            let angle = <i32 as Into<f64>>::into(last_value % 360) * PI / 180.0 * 2.0;
+            let x = 120 as f64 + angle.cos() * 100 as f64 - diameter as f64 / 2.0;
+            let y = 120 as f64 + angle.sin() * 100 as f64 - diameter as f64 / 2.0;
+            Circle::new(Point::new(x as i32, y as i32), diameter as u32)
+                .into_styled(dial_button_style)
+                .draw(&mut display)
+                .unwrap();
+
+            match last_touch {
+                [Some((x1, y1)), None] => {
+                    Circle::with_center(Point::new(y1 as i32, 240 - x1 as i32), 60 as u32)
+                        .into_styled(touch_style)
+                        .draw(&mut display)
+                        .unwrap();
+                }
+                [Some((x1, y1)), Some((x2, y2))] => {
+                    Circle::with_center(Point::new(y1 as i32, 240 - x1 as i32), 60 as u32)
+                        .into_styled(touch_style)
+                        .draw(&mut display)
+                        .unwrap();
+                    Circle::with_center(Point::new(y2 as i32, 240 - x2 as i32), 60 as u32)
+                        .into_styled(touch_style)
+                        .draw(&mut display)
+                        .unwrap();
+                }
+                _ => {}
+            }
+        }
+
+        // delay.delay_ms(500u32);
+        delay.delay_ms(16u32);
     }
 }
 
@@ -229,4 +294,73 @@ fn PCNT() {
             u0.reset_interrupt();
         }
     });
+}
+
+#[cfg(feature = "touch")]
+mod ft3267 {
+    use embedded_hal::blocking::delay::{DelayMs, DelayUs};
+    use embedded_hal::blocking::i2c::{Write, WriteRead};
+    use esp_println::println;
+
+    pub struct FT3267<I2C> {
+        i2c: I2C,
+        address: u8,
+    }
+
+    enum RegisterAddress {
+        FT_TP_STATUS = 0x02,
+        FT_TP1_XH = 0x03,
+        FT_TP1_XL = 0x04,
+        FT_TP1_YH = 0x05,
+        FT_TP1_YL = 0x06,
+        FT_TP2_XH = 0x09,
+        FT_TP2_XL = 0x0a,
+        FT_TP2_YH = 0x0b,
+        FT_TP2_YL = 0x0c,
+    }
+
+    impl<I2C, E> FT3267<I2C>
+    where
+        I2C: WriteRead<Error = E> + Write<Error = E>,
+    {
+        pub fn new(i2c: I2C) -> Self {
+            Self { i2c, address: 0x38 }
+        }
+
+        pub fn touch<D>(&mut self, delay: &mut D) -> [Option<(u16, u16)>; 2]
+        where
+            D: DelayUs<u8> + DelayMs<u8>,
+        {
+            let mut data: [u8; 13] = [0; 13];
+            for i in 0..13 {
+                if let Ok(d) = self.read(i) {
+                    data[i as usize] = d;
+                }
+            }
+            let count = data[RegisterAddress::FT_TP_STATUS as usize];
+            let mut points: [Option<(u16, u16)>; 2] = [None, None];
+            if count > 0 {
+                let x1 = ((data[RegisterAddress::FT_TP1_XH as usize] as u16 & 0x0F) << 8)
+                    | (data[RegisterAddress::FT_TP1_XL as usize] as u16);
+                let y1 = ((data[RegisterAddress::FT_TP1_YH as usize] as u16 & 0x0F) << 8)
+                    | (data[RegisterAddress::FT_TP1_YL as usize] as u16);
+                points[0 as usize] = Some((x1, y1));
+            }
+            if count > 1 {
+                let x2 = ((data[RegisterAddress::FT_TP2_XH as usize] as u16 & 0x0F) << 8)
+                    | (data[RegisterAddress::FT_TP2_XL as usize] as u16);
+                let y2 = ((data[RegisterAddress::FT_TP2_YH as usize] as u16 & 0x0F) << 8)
+                    | (data[RegisterAddress::FT_TP2_YL as usize] as u16);
+                points[1 as usize] = Some((x2, y2));
+            }
+            points
+        }
+
+        fn read(&mut self, register: u8) -> Result<u8, E> {
+            let mut data = [0];
+            self.i2c
+                .write_read(self.address, &[register], &mut data)
+                .map(|_| data[0])
+        }
+    }
 }
