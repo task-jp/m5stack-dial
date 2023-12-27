@@ -238,7 +238,10 @@ fn main() -> ! {
         }
 
         if changed {
-            display.clear(Rgb565::BLUE).unwrap();
+            Rectangle::new(Point::new(0, 0), Size::new(240, 240))
+                .into_styled(PrimitiveStyleBuilder::new().fill_color(Rgb565::BLUE).build())
+                .draw(&mut display)
+                .unwrap();
             let diameter: i32 = match last_pressed {
                 true => 20,
                 false => 40,
@@ -273,7 +276,7 @@ fn main() -> ! {
         }
 
         // delay.delay_ms(500u32);
-        delay.delay_ms(16u32);
+        delay.delay_ms(32u32); // 30fps
     }
 }
 
