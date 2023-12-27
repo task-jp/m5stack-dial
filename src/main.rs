@@ -262,17 +262,17 @@ fn main() -> ! {
 
             match last_touch {
                 [Some((x1, y1)), None] => {
-                    Circle::with_center(Point::new(y1 as i32, 240 - x1 as i32), 60 as u32)
+                    Circle::with_center(Point::new(x1 as i32, y1 as i32), 60 as u32)
                         .into_styled(touch_style)
                         .draw(&mut display)
                         .unwrap();
                 }
                 [Some((x1, y1)), Some((x2, y2))] => {
-                    Circle::with_center(Point::new(y1 as i32, 240 - x1 as i32), 60 as u32)
+                    Circle::with_center(Point::new(x1 as i32, y1 as i32), 60 as u32)
                         .into_styled(touch_style)
                         .draw(&mut display)
                         .unwrap();
-                    Circle::with_center(Point::new(y2 as i32, 240 - x2 as i32), 60 as u32)
+                    Circle::with_center(Point::new(x2 as i32, y2 as i32), 60 as u32)
                         .into_styled(touch_style)
                         .draw(&mut display)
                         .unwrap();
@@ -344,12 +344,12 @@ mod ft3267 {
             if count > 0 {
                 let x1 = ((data[FT_TP1_XH] as u16 & 0x0F) << 8) | (data[FT_TP1_XL] as u16);
                 let y1 = ((data[FT_TP1_YH] as u16 & 0x0F) << 8) | (data[FT_TP1_YL] as u16);
-                points[0] = Some((x1, y1));
+                points[0] = Some((y1, 240 - x1));
             }
             if count > 1 {
                 let x2 = ((data[FT_TP2_XH] as u16 & 0x0F) << 8) | (data[FT_TP2_XL] as u16);
                 let y2 = ((data[FT_TP2_YH] as u16 & 0x0F) << 8) | (data[FT_TP2_YL] as u16);
-                points[1] = Some((x2, y2));
+                points[1] = Some((y2, 240 - x2));
             }
             points
         }
