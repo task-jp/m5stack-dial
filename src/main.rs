@@ -246,6 +246,7 @@ fn main() -> ! {
                 )
                 .draw(&mut display)
                 .unwrap();
+            
             let diameter: i32 = match last_pressed {
                 true => 20,
                 false => 40,
@@ -258,24 +259,17 @@ fn main() -> ! {
                 .draw(&mut display)
                 .unwrap();
 
-            match last_touch {
-                [Some((x1, y1)), None] => {
-                    Circle::with_center(Point::new(x1 as i32, y1 as i32), 60 as u32)
-                        .into_styled(touch_style)
-                        .draw(&mut display)
-                        .unwrap();
-                }
-                [Some((x1, y1)), Some((x2, y2))] => {
-                    Circle::with_center(Point::new(x1 as i32, y1 as i32), 60 as u32)
-                        .into_styled(touch_style)
-                        .draw(&mut display)
-                        .unwrap();
-                    Circle::with_center(Point::new(x2 as i32, y2 as i32), 60 as u32)
-                        .into_styled(touch_style)
-                        .draw(&mut display)
-                        .unwrap();
-                }
-                _ => {}
+            if let Some((x1, y1)) = last_touch[0] {
+                Circle::with_center(Point::new(x1 as i32, y1 as i32), 60 as u32)
+                    .into_styled(touch_style)
+                    .draw(&mut display)
+                    .unwrap();
+            }
+            if let Some((x2, y2)) = last_touch[1] {
+                Circle::with_center(Point::new(x2 as i32, y2 as i32), 60 as u32)
+                    .into_styled(touch_style)
+                    .draw(&mut display)
+                    .unwrap();
             }
         }
 
