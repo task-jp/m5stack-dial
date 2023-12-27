@@ -241,7 +241,11 @@ fn main() -> ! {
 
         if changed {
             Rectangle::new(Point::new(0, 0), Size::new(240, 240))
-                .into_styled(PrimitiveStyleBuilder::new().fill_color(Rgb565::BLUE).build())
+                .into_styled(
+                    PrimitiveStyleBuilder::new()
+                        .fill_color(Rgb565::BLUE)
+                        .build(),
+                )
                 .draw(&mut display)
                 .unwrap();
             let diameter: i32 = match last_pressed {
@@ -303,25 +307,11 @@ fn PCNT() {
 
 #[cfg(feature = "touch")]
 mod ft3267 {
-    use embedded_hal::blocking::delay::{DelayMs, DelayUs};
     use embedded_hal::blocking::i2c::{Write, WriteRead};
-    use esp_println::println;
 
     pub struct FT3267<I2C> {
         i2c: I2C,
         address: u8,
-    }
-
-    enum RegisterAddress {
-        FT_TP_STATUS = 0x02,
-        FT_TP1_XH = 0x03,
-        FT_TP1_XL = 0x04,
-        FT_TP1_YH = 0x05,
-        FT_TP1_YL = 0x06,
-        FT_TP2_XH = 0x09,
-        FT_TP2_XL = 0x0a,
-        FT_TP2_YH = 0x0b,
-        FT_TP2_YL = 0x0c,
     }
 
     impl<I2C, E> FT3267<I2C>
@@ -332,29 +322,34 @@ mod ft3267 {
             Self { i2c, address: 0x38 }
         }
 
-        pub fn touch(&mut self) -> [Option<(u16, u16)>; 2]
-        {
+        pub fn touch(&mut self) -> [Option<(u16, u16)>; 2] {
+            const FT_TP_STATUS: usize = 0x02;
+            const FT_TP1_XH: usize = 0x03;
+            const FT_TP1_XL: usize = 0x04;
+            const FT_TP1_YH: usize = 0x05;
+            const FT_TP1_YL: usize = 0x06;
+            const FT_TP2_XH: usize = 0x09;
+            const FT_TP2_XL: usize = 0x0a;
+            const FT_TP2_YH: usize = 0x0b;
+            const FT_TP2_YL: usize = 0x0c;
+
             let mut data: [u8; 13] = [0; 13];
             for i in 0..13 {
                 if let Ok(d) = self.read(i) {
                     data[i as usize] = d;
                 }
             }
-            let count = data[RegisterAddress::FT_TP_STATUS as usize];
+            let count = data[FT_TP_STATUS];
             let mut points: [Option<(u16, u16)>; 2] = [None, None];
             if count > 0 {
-                let x1 = ((data[RegisterAddress::FT_TP1_XH as usize] as u16 & 0x0F) << 8)
-                    | (data[RegisterAddress::FT_TP1_XL as usize] as u16);
-                let y1 = ((data[RegisterAddress::FT_TP1_YH as usize] as u16 & 0x0F) << 8)
-                    | (data[RegisterAddress::FT_TP1_YL as usize] as u16);
-                points[0 as usize] = Some((x1, y1));
+                let x1 = ((data[FT_TP1_XH] as u16 & 0x0F) << 8) | (data[FT_TP1_XL] as u16);
+                let y1 = ((data[FT_TP1_YH] as u16 & 0x0F) << 8) | (data[FT_TP1_YL] as u16);
+                points[0] = Some((x1, y1));
             }
             if count > 1 {
-                let x2 = ((data[RegisterAddress::FT_TP2_XH as usize] as u16 & 0x0F) << 8)
-                    | (data[RegisterAddress::FT_TP2_XL as usize] as u16);
-                let y2 = ((data[RegisterAddress::FT_TP2_YH as usize] as u16 & 0x0F) << 8)
-                    | (data[RegisterAddress::FT_TP2_YL as usize] as u16);
-                points[1 as usize] = Some((x2, y2));
+                let x2 = ((data[FT_TP2_XH] as u16 & 0x0F) << 8) | (data[FT_TP2_XL] as u16);
+                let y2 = ((data[FT_TP2_YH] as u16 & 0x0F) << 8) | (data[FT_TP2_YL] as u16);
+                points[1] = Some((x2, y2));
             }
             points
         }
