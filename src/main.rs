@@ -96,8 +96,6 @@ fn main() -> ! {
         gc9a01::DisplaySize240x240,
     )
     .unwrap();
-    #[cfg(feature = "kaizensparc-gc9a01-rs")]
-    display.clear(Rgb565::BLUE).unwrap();
 
     #[cfg(feature = "IniterWorker-gc9a01-rs")]
     let iface = SPIInterface::new(spi, dc, cs);
@@ -172,7 +170,7 @@ fn main() -> ! {
     #[cfg(feature = "button")]
     let mtms = io.pins.gpio42.into_pull_up_input();
 
-    #[cfg(feature = "touch")]
+    #[cfg(feature = "i2c")]
     let i2c = esp32s3_hal::i2c::I2C::new(
         peripherals.I2C0,
         io.pins.gpio11, // tp sda
@@ -307,7 +305,7 @@ fn PCNT() {
 
 #[cfg(feature = "touch")]
 mod ft3267 {
-    use embedded_hal::blocking::i2c::{Write, WriteRead};
+    use embedded_hal::blocking::i2c::WriteRead;
 
     pub struct FT3267<I2C> {
         i2c: I2C,
@@ -316,7 +314,7 @@ mod ft3267 {
 
     impl<I2C, E> FT3267<I2C>
     where
-        I2C: WriteRead<Error = E> + Write<Error = E>,
+        I2C: WriteRead<Error = E>,
     {
         pub fn new(i2c: I2C) -> Self {
             Self { i2c, address: 0x38 }
