@@ -218,11 +218,13 @@ fn main() -> ! {
             let mut u0 = UNIT0.borrow_ref_mut(cs);
             let u0 = u0.as_mut().unwrap();
             let mut value: i32 = u0.get_value() as i32 + VALUE.load(Ordering::SeqCst);
-            while value < 0 {
-                value += 360;
-            }
+            // while value < 0 {
+            //     value += 64;
+            // }
+            value %= 128;
+            value = value * 360 / 128;
             if value != last_value {
-                // println!("value: {value}");
+                println!("value: {value}");
                 last_value = value;
                 changed = true;
             }
@@ -246,7 +248,7 @@ fn main() -> ! {
                 true => 20,
                 false => 40,
             };
-            let angle = <i32 as Into<f64>>::into(last_value % 360) * PI / 180.0 * 2.0;
+            let angle = <i32 as Into<f64>>::into(last_value) * PI / 180.0 * 2.0;
             let x = 120 as f64 + angle.cos() * 100 as f64 - diameter as f64 / 2.0;
             let y = 120 as f64 + angle.sin() * 100 as f64 - diameter as f64 / 2.0;
             Circle::new(Point::new(x as i32, y as i32), diameter as u32)
