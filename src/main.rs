@@ -207,7 +207,7 @@ fn main() -> ! {
 
         #[cfg(feature = "touch")]
         {
-            let t = touch.touch(&mut delay);
+            let t = touch.touch();
             if t != last_touch {
                 last_touch = t;
                 changed = true;
@@ -332,9 +332,7 @@ mod ft3267 {
             Self { i2c, address: 0x38 }
         }
 
-        pub fn touch<D>(&mut self, delay: &mut D) -> [Option<(u16, u16)>; 2]
-        where
-            D: DelayUs<u8> + DelayMs<u8>,
+        pub fn touch(&mut self) -> [Option<(u16, u16)>; 2]
         {
             let mut data: [u8; 13] = [0; 13];
             for i in 0..13 {
